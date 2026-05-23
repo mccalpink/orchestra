@@ -503,18 +503,6 @@ def _short_name(name: str) -> str:
     return name.replace("-orchestrator", "")
 
 
-# Эмодзи топиков по роли (дизайн-спека, раздел Telegram-интеграция).
-# Ключ — role; для пустого role + is_orchestrator берём Хаб (🧭).
-_ROLE_TOPIC_EMOJI = {
-    "pm-glava": "🎯",
-    "pm-fichi": "📋",
-    "analyst": "🔬",
-    "coder": "🛠",
-    "worker": "🔨",
-}
-_HUB_EMOJI = "🧭"
-
-
 def _feature_from_name(name: str, role: str) -> str:
     """Достаёт «имя фичи» из имени сессии, срезая role-префикс.
 
@@ -528,31 +516,39 @@ def _feature_from_name(name: str, role: str) -> str:
     return _short_name(name)
 
 
-def _topic_label(role: str, is_orchestrator: bool, name: str, scope: str) -> str:
-    """Имя+эмодзи топика по роли/типу сессии. Чистая функция (без сети).
+# Человекочитаемые метки ролей для имени топика (вторая часть — постоянная,
+# повторяется во всех темах; статус работает/idle показывает иконка топика ⚡/☕).
+_ROLE_LABEL = {
+    "pm-glava": "ПМ Глава",
+    "pm-fichi": "Фича ПМ",
+    "analyst": "Аналитик",
+    "coder": "Кодер",
+    "worker": "Воркер",
+}
 
-    - 🧭 Хаб (role пустой + оркестратор) → "🧭 <проект>"
-    - 🎯 PM-глава → "🎯 <проект>·спринт"
-    - 📋 PM-фичи → "📋 <фича>"
-    - 🔬 Аналитик → "🔬 <фича>·анализ"
-    - 🛠 Кодер → "🛠 <фича>·код"
-    - 🔨 Воркер (если включены свои топики, TG_WORKER_TOPICS=1) → "🔨 <имя>"
+
+def _topic_label(role: str, is_orchestrator: bool, name: str, scope: str) -> str:
+    """Имя топика в формате "<метка> | <Роль>". Чистая функция (без сети).
+
+    Роль-эмодзи в имени НЕ ставим — статус (⚡ работает / ☕ idle) показывает
+    отдельная иконка топика, а роль читается словом справа от разделителя.
+
+    - PM-глава → "<метка> | ПМ Глава" (метка из имени сессии: pm-glava-may24 → may24)
+    - PM-фичи  → "<фича> | Фича ПМ"
+    - Аналитик → "<фича> | Аналитик"
+    - Кодер    → "<фича> | Кодер"
+    - Воркер   → "<метка> | Воркер"  (если включены свои топики, TG_WORKER_TOPICS=1)
+    - Хаб / role-less оркестратор → "<проект> | Хаб"
     """
     from pathlib import Path as _P
     project = _P(scope).name if scope else "?"
     feature = _feature_from_name(name, role)
-    if role == "pm-glava":
-        return f"{_ROLE_TOPIC_EMOJI['pm-glava']} {project}·спринт"
-    if role == "pm-fichi":
-        return f"{_ROLE_TOPIC_EMOJI['pm-fichi']} {feature}"
-    if role == "analyst":
-        return f"{_ROLE_TOPIC_EMOJI['analyst']} {feature}·анализ"
-    if role == "coder":
-        return f"{_ROLE_TOPIC_EMOJI['coder']} {feature}·код"
+    if role in ("pm-glava", "pm-fichi", "analyst", "coder"):
+        return f"{feature} | {_ROLE_LABEL[role]}"
     if role == "worker" or not is_orchestrator:
-        return f"{_ROLE_TOPIC_EMOJI['worker']} {_short_name(name)}"
-    # role пустой/неизвестный + оркестратор → Хаб
-    return f"{_HUB_EMOJI} {project}"
+        return f"{feature} | {_ROLE_LABEL['worker']}"
+    # role пустой/неизвестный + оркестратор → Хаб (первая часть = проект)
+    return f"{project} | Хаб"
 
 
 # Порядок ролей внутри фичи (для группировки топиков в списке чата).
