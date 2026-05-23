@@ -550,6 +550,22 @@ def _topic_label(role: str, is_orchestrator: bool, name: str, scope: str) -> str
     return f"{_HUB_EMOJI} {project}"
 
 
+# Порядок ролей внутри фичи (для группировки топиков в списке чата).
+_ROLE_ORDER = {"": 0, "pm-glava": 1, "pm-fichi": 2, "analyst": 3, "coder": 4, "worker": 5}
+
+
+def _topic_sort_key(row: dict):
+    """Ключ сортировки топиков: сначала по имени фичи, потом по роли.
+
+    Топики одной фичи оказываются подряд в списке топиков TG-чата.
+    Хаб/pm-glava (без фичи) — по проекту.
+    """
+    role = row.get("role", "")
+    name = row.get("name", "")
+    feature = _feature_from_name(name, role)
+    return (feature, _ROLE_ORDER.get(role, 99), name)
+
+
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 
@@ -747,6 +763,7 @@ async def ensure_topics():
         orchs = orchs + [s for s in sessions if not s.get("is_orchestrator")]
     if not orchs:
         return
+    orchs = sorted(orchs, key=_topic_sort_key)
 
     for o in orchs:
         name = o["name"]
