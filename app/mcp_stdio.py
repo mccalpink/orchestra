@@ -57,16 +57,20 @@ async def spawn_worker(name: str, task: str, repo_path: str,
                        system_prompt: str = "",
                        task_id: str = "",
                        description: str = "",
+                       is_orchestrator: bool = False,
+                       role: str = "",
                        base_branch: str = "main") -> str:
-    """Spawn a new worker agent in a git worktree. Model is REQUIRED — choose explicitly: claude-opus-4-6[1m] for research/planning/long-lived, claude-sonnet-4-6 for implementation from spec, gpt-5.5 for Codex.
-    base_branch — от какой ветки ответвить worktree воркера (default main)."""
+    """Spawn a child agent. is_orchestrator=True → sub-orchestrator (no worktree, can spawn its own children); False → worker in a git worktree. role optionally loads a role prompt (e.g. pm-fichi, analyst, coder). Model REQUIRED.
+    base_branch — от какой ветки ответвить worktree воркера (default main; coder-воркеры этапов → ветка фичи)."""
     if not model:
         return "Error: model is required. Choose: claude-opus-4-6[1m] (think), claude-sonnet-4-6 (type), gpt-5.5 (codex)"
     scope = SCOPE or repo_path
     body = {
         "name": name, "scope": scope, "cwd": repo_path,
         "model": model, "system_prompt": system_prompt,
-        "use_worktree": True, "repo_path": repo_path,
+        "use_worktree": not is_orchestrator, "repo_path": repo_path,
+        "is_orchestrator": is_orchestrator, "role": role,
+        "parent_name": WORKER_NAME,
         "base_branch": base_branch,
     }
     if task_id:
@@ -79,7 +83,8 @@ async def spawn_worker(name: str, task: str, repo_path: str,
     await _api("POST", f"/api/sessions/{name}/send", json={
         "message": task, "scope": scope,
     })
-    return f"Worker '{name}' spawned. Model: {model}. Task sent."
+    kind = "Orchestrator" if is_orchestrator else "Worker"
+    return f"{kind} '{name}'{f' (role={role})' if role else ''} spawned. Model: {model}. Task sent."
 
 
 @mcp.tool()
