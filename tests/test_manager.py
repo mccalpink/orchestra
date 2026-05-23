@@ -226,3 +226,26 @@ class TestHierarchyReport:
                                              model="claude-opus-4-6[1m]", is_orchestrator=True,
                                              role="analyst", parent_name="pm-fichi-auth")
         assert child.parent_id == parent.id
+
+
+class TestResumeHierarchy:
+    @pytest.mark.asyncio
+    async def test_load_restores_role_parent(self, mgr):
+        from app.db import save_session
+        from datetime import datetime, timezone
+        row = {
+            "id": "child-1", "name": "coder-auth", "scope": "/s", "cwd": "/tmp",
+            "model": "claude-opus-4-6[1m]", "system_prompt": "", "status": "idle",
+            "session_id": "sess-x", "cost_usd": 0.0, "worktree_path": None, "branch": None,
+            "is_orchestrator": True, "color": "", "created_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None, "role": "coder", "parent_id": "pid-1", "parent_name": "pm-fichi-auth",
+        }
+        save_session(row)
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            s = await mgr._load_from_db(row)
+        assert s.role == "coder"
+        assert s.parent_id == "pid-1"
+        assert s.parent_name == "pm-fichi-auth"

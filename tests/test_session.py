@@ -49,7 +49,7 @@ class TestStart:
     @pytest.mark.asyncio
     async def test_with_message(self, session, mock_sdk):
         from app.session import AgentStatus
-        with patch("app.session.AgentSession._make_client", return_value=mock_sdk):
+        with patch("app.session.AgentSession._make_backend", return_value=mock_sdk):
             await session.start("hi")
             if session._turn_task:
                 await session._turn_task
@@ -62,7 +62,7 @@ class TestSend:
     @pytest.mark.asyncio
     async def test_send_triggers_turn(self, session, mock_sdk):
         session.debounce_sec = 0.1
-        with patch("app.session.AgentSession._make_client", return_value=mock_sdk):
+        with patch("app.session.AgentSession._make_backend", return_value=mock_sdk):
             await session.start()
             await session.send("task")
             await asyncio.sleep(0.3)
@@ -76,7 +76,7 @@ class TestTurn:
     async def test_error_returns_to_idle(self, session, mock_sdk):
         from app.session import AgentStatus
         mock_sdk.connect = AsyncMock(side_effect=ConnectionError("fail"))
-        with patch("app.session.AgentSession._make_client", return_value=mock_sdk):
+        with patch("app.session.AgentSession._make_backend", return_value=mock_sdk):
             await session.start("task")
             if session._turn_task:
                 try:
@@ -87,7 +87,7 @@ class TestTurn:
 
     @pytest.mark.asyncio
     async def test_disconnect_called(self, session, mock_sdk):
-        with patch("app.session.AgentSession._make_client", return_value=mock_sdk):
+        with patch("app.session.AgentSession._make_backend", return_value=mock_sdk):
             await session.start("task")
             if session._turn_task:
                 await session._turn_task
@@ -98,7 +98,7 @@ class TestStop:
     @pytest.mark.asyncio
     async def test_stop_sets_idle(self, session, mock_sdk):
         from app.session import AgentStatus
-        with patch("app.session.AgentSession._make_client", return_value=mock_sdk):
+        with patch("app.session.AgentSession._make_backend", return_value=mock_sdk):
             await session.start()
             await session.stop()
         assert session.status == AgentStatus.IDLE
