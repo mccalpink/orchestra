@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -134,6 +135,42 @@ class TestWorktreeBaseBranch:
         base = subprocess.run(["git", "merge-base", session.branch, "feature/auth"], cwd=repo,
                               capture_output=True, text=True).stdout.strip()
         assert base == head
+
+
+class TestDocsFeaturePropagate:
+    @pytest.mark.asyncio
+    async def test_docs_feature_creates_symlink(self, mgr, tmp_path):
+        import subprocess
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=repo, capture_output=True)
+        (repo / "f.txt").write_text("x")
+        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "i"], cwd=repo, capture_output=True, check=True)
+        subprocess.run(["git", "branch", "-M", "main"], cwd=repo, capture_output=True, check=True)
+        # docs_work должна быть в .gitignore — иначе _auto_commit_if_dirty коммитит её
+        # и create_worktree checkout создаёт реальную директорию вместо симлинка
+        (repo / ".gitignore").write_text("docs_work/\n")
+        subprocess.run(["git", "add", ".gitignore"], cwd=repo, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "gitignore"], cwd=repo, capture_output=True, check=True)
+        feat_dir = repo / "docs_work" / "auth"
+        feat_dir.mkdir(parents=True)
+        (feat_dir / "SPEC.md").write_text("# spec")
+
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            session = await mgr.create_session(
+                name="coder-1", scope="/s", cwd=str(repo), model="m",
+                use_worktree=True, repo_path=str(repo),
+                docs_feature="auth",
+            )
+        link = Path(session.worktree_path) / "docs_work" / "auth"
+        assert link.is_symlink()
+        assert (link / "SPEC.md").read_text() == "# spec"
 
 
 class TestSendAndControl:

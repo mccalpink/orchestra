@@ -89,6 +89,7 @@ class CreateSessionRequest(BaseModel):
     task_id: str = ""
     description: str = ""
     base_branch: str = "main"
+    docs_feature: str = ""
 
     @field_validator("name")
     @classmethod
@@ -368,6 +369,7 @@ async def create_session(req: CreateSessionRequest):
             task_id=req.task_id,
             description=req.description,
             base_branch=req.base_branch,
+            docs_feature=req.docs_feature,
         )
         return session.to_dict()
     except ValueError as e:
