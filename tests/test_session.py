@@ -102,3 +102,18 @@ class TestStop:
             await session.start()
             await session.stop()
         assert session.status == AgentStatus.IDLE
+
+
+def test_session_carries_role_and_parent():
+    from app.session import AgentSession
+    s = AgentSession(id="i", name="coder-auth", scope="/s", cwd="/tmp",
+                     role="coder", parent_id="pid", parent_name="pm-fichi-auth")
+    assert s.role == "coder"
+    assert s.parent_id == "pid"
+    d = s._to_db_dict()
+    assert d["role"] == "coder"
+    assert d["parent_id"] == "pid"
+    assert d["parent_name"] == "pm-fichi-auth"
+    pub = s.to_dict()
+    assert pub["role"] == "coder"
+    assert pub["parent_name"] == "pm-fichi-auth"
