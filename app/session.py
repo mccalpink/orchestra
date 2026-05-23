@@ -677,11 +677,12 @@ class AgentSession:
             if self.is_orchestrator:
                 orch_name = self.name
             else:
-                orch_name = None
-                for s in tg_mgr.sessions.values():
-                    if s.is_orchestrator and s.scope == self.scope:
-                        orch_name = s.name
-                        break
+                orch_name = self.parent_name or None
+                if not orch_name:
+                    for s in tg_mgr.sessions.values():
+                        if s.is_orchestrator and s.scope == self.scope:
+                            orch_name = s.name
+                            break
             if orch_name:
                 await check_scope_idle(orch_name, self.scope)
         except Exception:
