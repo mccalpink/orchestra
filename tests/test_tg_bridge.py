@@ -2,38 +2,39 @@ import pytest
 
 
 class TestTopicLabel:
+    # Формат: "<метка> | <Роль>". Роль-эмодзи в имени НЕ ставим (статус ⚡/☕ — иконка топика).
     def test_hub_default_orchestrator(self):
-        # role пустой + is_orchestrator → Хаб: 🧭 <проект>
+        # role пустой + is_orchestrator → Хаб, первая часть = проект
         from app.tg_bridge import _topic_label
-        assert _topic_label("", True, "myproj-orchestrator", "/home/user/projects/myproj") == "🧭 myproj"
+        assert _topic_label("", True, "myproj-orchestrator", "/home/user/projects/myproj") == "myproj | Хаб"
 
     def test_pm_glava(self):
         from app.tg_bridge import _topic_label
-        # 🎯 PM-глава: 🎯 <проект>·спринт
-        assert _topic_label("pm-glava", True, "pm-glava-q2", "/home/user/projects/myproj") == "🎯 myproj·спринт"
+        # PM-глава: метка берётся из имени сессии (pm-glava-q2 → q2)
+        assert _topic_label("pm-glava", True, "pm-glava-q2", "/home/user/projects/myproj") == "q2 | ПМ Глава"
 
     def test_pm_fichi(self):
         from app.tg_bridge import _topic_label
-        # 📋 PM-фичи: 📋 <фича> (фича = имя сессии без role-префикса)
-        assert _topic_label("pm-fichi", True, "pm-fichi-auth", "/s") == "📋 auth"
+        # PM-фичи: <фича> | Фича ПМ (фича = имя сессии без role-префикса)
+        assert _topic_label("pm-fichi", True, "pm-fichi-auth", "/s") == "auth | Фича ПМ"
 
     def test_analyst(self):
         from app.tg_bridge import _topic_label
-        assert _topic_label("analyst", True, "analyst-auth", "/s") == "🔬 auth·анализ"
+        assert _topic_label("analyst", True, "analyst-auth", "/s") == "auth | Аналитик"
 
     def test_coder(self):
         from app.tg_bridge import _topic_label
-        assert _topic_label("coder", True, "coder-auth", "/s") == "🛠 auth·код"
+        assert _topic_label("coder", True, "coder-auth", "/s") == "auth | Кодер"
 
     def test_worker_own_topic(self):
         from app.tg_bridge import _topic_label
-        # 🔨 воркер (когда у воркеров включены свои топики): 🔨 <имя>
-        assert _topic_label("worker", False, "auth-step1", "/s") == "🔨 auth-step1"
+        # воркер (когда включены свои топики): <метка> | Воркер
+        assert _topic_label("worker", False, "auth-step1", "/s") == "auth-step1 | Воркер"
 
-    def test_unknown_role_orchestrator_falls_back_to_hub_emoji(self):
+    def test_unknown_role_orchestrator_falls_back_to_hub(self):
         from app.tg_bridge import _topic_label
-        # неизвестная роль + оркестратор → 🧭 + имя (безопасный фолбэк)
-        assert _topic_label("weird", True, "x-orchestrator", "/s").startswith("🧭 ")
+        # неизвестная роль + оркестратор → Хаб (безопасный фолбэк)
+        assert _topic_label("weird", True, "x-orchestrator", "/s") == "s | Хаб"
 
 
 class TestEnsureTopicsNaming:
@@ -67,7 +68,7 @@ class TestEnsureTopicsNaming:
         monkeypatch.setattr(tg.asyncio, "create_task", lambda coro: (coro.close() or MagicMock()))
 
         await tg.ensure_topics()
-        assert created["name"] == "📋 auth"
+        assert created["name"] == "auth | Фича ПМ"
         assert tg.config["topics"]["pm-fichi-auth"] == 555
 
 
