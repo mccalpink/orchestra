@@ -59,7 +59,8 @@ async def spawn_worker(name: str, task: str, repo_path: str,
                        description: str = "",
                        is_orchestrator: bool = False,
                        role: str = "",
-                       base_branch: str = "main") -> str:
+                       base_branch: str = "main",
+                       docs_feature: str = "") -> str:
     """Spawn a child agent. is_orchestrator=True → sub-orchestrator (no worktree, can spawn its own children); False → worker in a git worktree. role optionally loads a role prompt (e.g. pm-fichi, analyst, coder). Model REQUIRED.
     base_branch — от какой ветки ответвить worktree воркера (default main; coder-воркеры этапов → ветка фичи)."""
     if not model:
@@ -72,6 +73,7 @@ async def spawn_worker(name: str, task: str, repo_path: str,
         "is_orchestrator": is_orchestrator, "role": role,
         "parent_name": WORKER_NAME,
         "base_branch": base_branch,
+        "docs_feature": docs_feature,
     }
     if task_id:
         body["task_id"] = task_id

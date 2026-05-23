@@ -117,6 +117,28 @@ class TestCreateWorktree:
         assert base == head
 
 
+class TestDocsWorkSymlink:
+    def test_symlinks_docs_feature(self, git_repo, wt_root):
+        from app.workspace import create_worktree
+        feat_dir = git_repo / "docs_work" / "auth"
+        feat_dir.mkdir(parents=True)
+        (feat_dir / "SPEC.md").write_text("# spec")
+        wt = create_worktree(str(git_repo), "worker-1", "/scope", docs_feature="auth")
+        link = Path(wt.path) / "docs_work" / "auth"
+        assert link.is_symlink()
+        assert (link / "SPEC.md").read_text() == "# spec"
+
+    def test_no_symlink_when_absent(self, git_repo, wt_root):
+        from app.workspace import create_worktree
+        wt = create_worktree(str(git_repo), "worker-2", "/scope", docs_feature="missing")
+        assert not (Path(wt.path) / "docs_work" / "missing").exists()
+
+    def test_no_docs_feature_arg_ok(self, git_repo, wt_root):
+        from app.workspace import create_worktree
+        wt = create_worktree(str(git_repo), "worker-3", "/scope")
+        assert Path(wt.path).exists()
+
+
 class TestSwitchWorktreeBranch:
     def test_from_ref_used_for_merge_check(self, git_repo, wt_root):
         """switch_worktree_branch использует from_ref, а не hardcode main.

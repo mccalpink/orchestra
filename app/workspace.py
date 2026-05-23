@@ -47,8 +47,27 @@ def _normalize_task_id(task_id: str) -> str:
     raise ValueError(f"Invalid task_id '{task_id}': expected number, #N, or PREFIX-N (legacy)")
 
 
+def _symlink_docs_feature(repo: Path, wt_path: Path, docs_feature: str) -> None:
+    """Симлинкает docs_work/<feature>/ из основного репо внутрь worktree.
+
+    Coder-воркеры читают спеку/план фичи. Если папки нет — тихо пропускаем.
+    """
+    src = repo / "docs_work" / docs_feature
+    if not src.is_dir():
+        return
+    dst_parent = wt_path / "docs_work"
+    dst_parent.mkdir(parents=True, exist_ok=True)
+    dst = dst_parent / docs_feature
+    if dst.exists() or dst.is_symlink():
+        return
+    try:
+        dst.symlink_to(src, target_is_directory=True)
+    except OSError as e:
+        logger.warning(f"docs_work symlink failed ({src} -> {dst}): {e}")
+
+
 def create_worktree(repo_path: str, name: str, scope: str, task_id: str = "",
-                    base_branch: str = "main") -> Worktree:
+                    base_branch: str = "main", docs_feature: str = "") -> Worktree:
     repo = Path(repo_path).resolve()
     if not repo.is_dir():
         raise ValueError(f"repo_path does not exist: {repo_path}")
@@ -103,6 +122,9 @@ def create_worktree(repo_path: str, name: str, scope: str, task_id: str = "",
             src = repo.parent / fname
         if src.exists():
             shutil.copy2(str(src), str(wt_path / fname))
+
+    if docs_feature:
+        _symlink_docs_feature(repo, wt_path, docs_feature)
 
     return Worktree(path=str(wt_path), branch=branch)
 

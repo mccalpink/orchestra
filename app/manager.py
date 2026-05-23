@@ -185,7 +185,8 @@ class SessionManager:
                              repo_path: str | None = None, is_orchestrator: bool = False,
                              task_id: str = "", description: str = "",
                              role: str = "", parent_id: str = "", parent_name: str = "",
-                             base_branch: str = "main") -> AgentSession:
+                             base_branch: str = "main",
+                             docs_feature: str = "") -> AgentSession:
         scope = scope.rstrip("/")
         cwd = cwd.rstrip("/")
         model = resolve_model(model)
@@ -225,7 +226,7 @@ class SessionManager:
         try:
             if use_worktree and repo_path:
                 await asyncio.to_thread(self._auto_commit_if_dirty, repo_path)
-                wt = await asyncio.to_thread(create_worktree, repo_path, name, scope, task_id, base_branch)
+                wt = await asyncio.to_thread(create_worktree, repo_path, name, scope, task_id, base_branch, docs_feature)
                 session.cwd = wt.path
                 session.worktree_path = wt.path
                 session.branch = wt.branch
