@@ -239,3 +239,17 @@ class TestWorkerStreamWiring:
                 streamed.append(row["name"])
         assert "coder-step1" not in streamed  # воркер не стримится при флаге off
         assert "coder-auth" in streamed        # оркестратор стримится
+
+
+class TestFeatureGrouping:
+    def test_sort_key_groups_by_feature_then_role(self):
+        from app.tg_bridge import _topic_sort_key
+        rows = [
+            {"name": "coder-auth", "role": "coder", "scope": "/s", "is_orchestrator": 1},
+            {"name": "analyst-pay", "role": "analyst", "scope": "/s", "is_orchestrator": 1},
+            {"name": "pm-fichi-auth", "role": "pm-fichi", "scope": "/s", "is_orchestrator": 1},
+            {"name": "analyst-auth", "role": "analyst", "scope": "/s", "is_orchestrator": 1},
+        ]
+        ordered = [r["name"] for r in sorted(rows, key=_topic_sort_key)]
+        # auth-группа целиком раньше pay-группы; внутри auth: pm-fichi < analyst < coder
+        assert ordered == ["pm-fichi-auth", "analyst-auth", "coder-auth", "analyst-pay"]
