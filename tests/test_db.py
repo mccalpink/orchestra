@@ -332,6 +332,28 @@ class TestStats:
         assert stats["total_logs"] == 2
 
 
+class TestHierarchyColumns:
+    def test_save_and_read_role_parent(self, db, sample_session):
+        from app.db import save_session, get_session_by_name
+        s = dict(sample_session)
+        s["role"] = "coder"
+        s["parent_id"] = "parent-uuid-123"
+        s["parent_name"] = "pm-fichi-auth"
+        save_session(s)
+        row = get_session_by_name("worker-1", s["scope"])
+        assert row["role"] == "coder"
+        assert row["parent_id"] == "parent-uuid-123"
+        assert row["parent_name"] == "pm-fichi-auth"
+
+    def test_defaults_empty(self, db, sample_session):
+        from app.db import save_session, get_session_by_name
+        save_session(dict(sample_session))  # без role/parent
+        row = get_session_by_name("worker-1", sample_session["scope"])
+        assert row["role"] == ""
+        assert row["parent_id"] == ""
+        assert row["parent_name"] == ""
+
+
 class TestTestLock:
     def test_acquire_succeeds_when_free(self, db):
         from app.db import acquire_test_lock, get_test_lock
