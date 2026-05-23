@@ -51,6 +51,13 @@ def _read_prompt(name: str) -> str:
     return p.read_text() if p.exists() else ""
 
 
+def _read_role_prompt(role: str) -> str:
+    if not role:
+        return ""
+    p = _PROMPTS_DIR / "roles" / f"{role}.md"
+    return ("\n\n" + p.read_text()) if p.exists() else ""
+
+
 def _other_orchestrators_block(exclude_scope: str = "") -> str:
     try:
         orchs = [s for s in get_all_sessions()
@@ -89,8 +96,9 @@ def _workers_block(scope: str) -> str:
         return ""
 
 
-def ORCHESTRATOR_SYSTEM_PROMPT(scope: str = "") -> str:
+def ORCHESTRATOR_SYSTEM_PROMPT(scope: str = "", role: str = "") -> str:
     base = f"{_read_prompt('base.md')}\n\n{_read_prompt('orchestrator.md')}"
+    base += _read_role_prompt(role)
     others = _other_orchestrators_block(scope)
     if others:
         base += f"\n\n{others}"
@@ -100,8 +108,8 @@ def ORCHESTRATOR_SYSTEM_PROMPT(scope: str = "") -> str:
     return base
 
 
-def WORKER_SYSTEM_PROMPT() -> str:
-    return f"{_read_prompt('base.md')}\n\n{_read_prompt('worker.md')}"
+def WORKER_SYSTEM_PROMPT(role: str = "") -> str:
+    return f"{_read_prompt('base.md')}\n\n{_read_prompt('worker.md')}{_read_role_prompt(role)}"
 
 
 def _make_mcp_config(name: str, scope: str, is_orch: bool) -> dict:
@@ -173,6 +181,7 @@ class SessionManager:
                              system_prompt: str = "", use_worktree: bool = False,
                              repo_path: str | None = None, is_orchestrator: bool = False,
                              task_id: str = "", description: str = "",
+                             role: str = "", parent_id: str = "", parent_name: str = "",
                              base_branch: str = "main") -> AgentSession:
         scope = scope.rstrip("/")
         cwd = cwd.rstrip("/")
@@ -183,9 +192,9 @@ class SessionManager:
             raise ValueError(f"session '{name}' already exists in scope '{scope}'")
 
         if is_orchestrator:
-            prompt = system_prompt or ORCHESTRATOR_SYSTEM_PROMPT(scope)
+            prompt = system_prompt or ORCHESTRATOR_SYSTEM_PROMPT(scope, role)
         else:
-            prompt = WORKER_SYSTEM_PROMPT() + ("\n\n" + system_prompt if system_prompt else "")
+            prompt = WORKER_SYSTEM_PROMPT(role) + ("\n\n" + system_prompt if system_prompt else "")
 
         bt = backend_for_model(model)
         session = AgentSession(
@@ -194,6 +203,7 @@ class SessionManager:
             color="" if is_orchestrator else self._pick_color(),
             mcp_servers=_make_mcp_config(name, scope, is_orchestrator),
             backend_type=bt, task_id=task_id, description=description,
+            role=role, parent_id=parent_id, parent_name=parent_name,
         )
         save_session(session._to_db_dict())
 
