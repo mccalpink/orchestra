@@ -490,6 +490,58 @@ def _short_name(name: str) -> str:
     return name.replace("-orchestrator", "")
 
 
+# Эмодзи топиков по роли (дизайн-спека, раздел Telegram-интеграция).
+# Ключ — role; для пустого role + is_orchestrator берём Хаб (🧭).
+_ROLE_TOPIC_EMOJI = {
+    "pm-glava": "🎯",
+    "pm-fichi": "📋",
+    "analyst": "🔬",
+    "coder": "🛠",
+    "worker": "🔨",
+}
+_HUB_EMOJI = "🧭"
+
+
+def _feature_from_name(name: str, role: str) -> str:
+    """Достаёт «имя фичи» из имени сессии, срезая role-префикс.
+
+    Конвенция спавна (роль-промпты): сессии называют по схеме <role>-<фича>
+    (pm-fichi-auth → auth). Если на практике спавнят без префикса —
+    вернётся имя как есть (безопасно).
+    """
+    prefix = f"{role}-"
+    if role and name.startswith(prefix):
+        return name[len(prefix):] or name
+    return _short_name(name)
+
+
+def _topic_label(role: str, is_orchestrator: bool, name: str, scope: str) -> str:
+    """Имя+эмодзи топика по роли/типу сессии. Чистая функция (без сети).
+
+    - 🧭 Хаб (role пустой + оркестратор) → "🧭 <проект>"
+    - 🎯 PM-глава → "🎯 <проект>·спринт"
+    - 📋 PM-фичи → "📋 <фича>"
+    - 🔬 Аналитик → "🔬 <фича>·анализ"
+    - 🛠 Кодер → "🛠 <фича>·код"
+    - 🔨 Воркер (если включены свои топики, TG_WORKER_TOPICS=1) → "🔨 <имя>"
+    """
+    from pathlib import Path as _P
+    project = _P(scope).name if scope else "?"
+    feature = _feature_from_name(name, role)
+    if role == "pm-glava":
+        return f"{_ROLE_TOPIC_EMOJI['pm-glava']} {project}·спринт"
+    if role == "pm-fichi":
+        return f"{_ROLE_TOPIC_EMOJI['pm-fichi']} {feature}"
+    if role == "analyst":
+        return f"{_ROLE_TOPIC_EMOJI['analyst']} {feature}·анализ"
+    if role == "coder":
+        return f"{_ROLE_TOPIC_EMOJI['coder']} {feature}·код"
+    if role == "worker" or not is_orchestrator:
+        return f"{_ROLE_TOPIC_EMOJI['worker']} {_short_name(name)}"
+    # role пустой/неизвестный + оркестратор → Хаб
+    return f"{_HUB_EMOJI} {project}"
+
+
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 
