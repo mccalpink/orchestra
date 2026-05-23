@@ -173,6 +173,42 @@ class TestDocsFeaturePropagate:
         assert (link / "SPEC.md").read_text() == "# spec"
 
 
+class TestDocScaffolding:
+    @pytest.mark.asyncio
+    async def test_pm_glava_creates_sprint_dir(self, mgr, tmp_path):
+        repo = tmp_path / "repo"; repo.mkdir()
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            await mgr.create_session(name="pm", scope=str(repo), cwd=str(repo), model="m",
+                                     is_orchestrator=True, role="pm-glava")
+        assert (repo / "docs_work" / "_sprint" / "dashboard.md").exists()
+
+    @pytest.mark.asyncio
+    async def test_coder_creates_impl_dir_with_docs_feature(self, mgr, tmp_path):
+        repo = tmp_path / "repo"; repo.mkdir()
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            await mgr.create_session(name="coder", scope=str(repo), cwd=str(repo), model="m",
+                                     is_orchestrator=True, role="coder", docs_feature="auth")
+        assert (repo / "docs_work" / "auth" / "_impl" / "dashboard.md").exists()
+
+    @pytest.mark.asyncio
+    async def test_coder_no_docs_feature_no_scaffold(self, mgr, tmp_path):
+        repo = tmp_path / "repo"; repo.mkdir()
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            await mgr.create_session(name="coder2", scope=str(repo), cwd=str(repo), model="m",
+                                     is_orchestrator=True, role="coder")
+        # нет docs_feature — scaffolding не происходит, не падает
+        assert not (repo / "docs_work").exists()
+
+
 class TestSendAndControl:
     @pytest.mark.asyncio
     async def test_send_routes(self, mgr):

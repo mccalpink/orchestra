@@ -96,6 +96,38 @@ def _workers_block(scope: str) -> str:
         return ""
 
 
+_ROLE_DOC_DIRS = {
+    "pm-glava": ("_sprint", "# Sprint Dashboard\n\n## Фичи\n\n| Фича | Статус | Заметки |\n|---|---|---|\n"),
+}
+_ROLE_DOC_DIRS_FEATURE = {
+    "pm-fichi": ("_pm", "# PM Dashboard — {feature}\n\n## Этапы\n\n- [ ] анализ\n- [ ] реализация\n"),
+    "analyst": ("_analysis", "# Анализ — {feature}\n\n## Чеклист\n\n- [ ] изучен бэк\n- [ ] изучен фронт\n"),
+    "coder": ("_impl", "# Реализация — {feature}\n\n## Этапы\n\n- [ ] этап 1\n"),
+}
+
+
+def _scaffold_role_docs(cwd: str, role: str, feature: str = "") -> None:
+    """Идемпотентно создаёт папку/шаблон роли в docs_work/.
+
+    Источник имени фичи — явный параметр docs_feature (не description).
+    Если feature не передан для feature-ролей — пропускаем.
+    """
+    base = Path(cwd) / "docs_work"
+    if role in _ROLE_DOC_DIRS:
+        sub, tpl = _ROLE_DOC_DIRS[role]
+        d = base / sub
+    elif role in _ROLE_DOC_DIRS_FEATURE and feature:
+        sub, tpl = _ROLE_DOC_DIRS_FEATURE[role]
+        d = base / feature / sub
+        tpl = tpl.format(feature=feature)
+    else:
+        return
+    d.mkdir(parents=True, exist_ok=True)
+    dashboard = d / "dashboard.md"
+    if not dashboard.exists():
+        dashboard.write_text(tpl)
+
+
 def ORCHESTRATOR_SYSTEM_PROMPT(scope: str = "", role: str = "") -> str:
     base = f"{_read_prompt('base.md')}\n\n{_read_prompt('orchestrator.md')}"
     base += _read_role_prompt(role)
@@ -246,6 +278,11 @@ class SessionManager:
             save_session(session._to_db_dict())
             await session.start()
             self.sessions[session.id] = session
+            if is_orchestrator and role:
+                try:
+                    await asyncio.to_thread(_scaffold_role_docs, session.cwd, role, docs_feature)
+                except Exception as e:
+                    logger.warning(f"role doc scaffolding failed: {e}")
             return session
         except Exception:
             delete_session(session.id)
