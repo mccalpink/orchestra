@@ -971,25 +971,57 @@ function renderAgentList(sessions) {
     list.innerHTML = '';
 
     const active = sessions;
-    const archive = [];
-
     for (const s of active) {
         if (s.color) agentColors[s.name] = s.color;
-        list.appendChild(createAgentItem(s));
     }
 
-    if (archive.length > 0) {
-        const divider = document.createElement('div');
-        divider.className = 'text-xs text-slate-700 uppercase tracking-wider px-3 pt-3 pb-1';
-        divider.textContent = `Archive (${archive.length})`;
-        list.appendChild(divider);
-        for (const s of archive) {
-            list.appendChild(createAgentItem(s));
+    // --- Построение дерева: связь по parent_name ↔ name, fallback по scope ---
+    const byName = new Map();
+    for (const s of active) byName.set(s.name, s);
+
+    // children[parentName] = [child, ...]
+    const children = new Map();
+    const roots = [];
+
+    // helper: найти оркестратора-корень того же scope (для worker без parent)
+    const orchRootByScope = (scope) =>
+        active.find(o => o.is_orchestrator && o.scope === scope && !o.parent_name) || null;
+
+    for (const s of active) {
+        let parentName = s.parent_name || '';
+        // parent указан, но в списке нет такого узла → считаем корнем
+        if (parentName && !byName.has(parentName)) parentName = '';
+        // воркер без parent → подвесить под оркестратором своего scope (fallback)
+        if (!parentName && !s.is_orchestrator) {
+            const root = orchRootByScope(s.scope);
+            if (root && root.name !== s.name) parentName = root.name;
         }
+        if (parentName) {
+            if (!children.has(parentName)) children.set(parentName, []);
+            children.get(parentName).push(s);
+        } else {
+            roots.push(s);
+        }
+    }
+
+    // обход в глубину с защитой от циклов
+    const seen = new Set();
+    const walk = (node, depth) => {
+        if (seen.has(node.name)) return;
+        seen.add(node.name);
+        list.appendChild(createAgentItem(node, depth));
+        const kids = children.get(node.name) || [];
+        for (const k of kids) walk(k, depth + 1);
+    };
+    for (const r of roots) walk(r, 0);
+
+    // страховка: сироты и узлы в циклах — добавить на верхний уровень
+    for (const s of active) {
+        if (!seen.has(s.name)) { seen.add(s.name); list.appendChild(createAgentItem(s, 0)); }
     }
 }
 
-function createAgentItem(s) {
+function createAgentItem(s, depth = 0) {
     const isSelected = s.name === selectedAgent;
     const isDead = s.status === 'stopped' || s.status === 'error';
     const item = document.createElement('div');
@@ -999,10 +1031,15 @@ function createAgentItem(s) {
     }`;
     item.addEventListener('click', () => selectAgent(s.name));
 
+    if (depth > 0) {
+        item.style.marginLeft = `${depth * 14}px`;
+    }
+
     if (s.color) item.style.borderLeft = `3px solid ${s.color}`;
 
     const icon = document.createElement('span');
-    icon.textContent = s.is_orchestrator ? '🎯' : isDead ? '🪦' : '⚙️';
+    const roleIcon = { 'base-orchestrator': '🧭', 'pm-glava': '🎯', 'pm-fichi': '📋', 'analyst': '🔬', 'coder': '🛠' };
+    icon.textContent = isDead ? '🪦' : (s.role && roleIcon[s.role]) || (s.is_orchestrator ? '🎯' : '⚙️');
     icon.className = 'text-sm';
 
     const info = document.createElement('div');
