@@ -138,7 +138,7 @@ Codex не знает масштаб проекта и ревьюит как ent
 
 ```
 PROJECT CONTEXT (calibrate your review severity accordingly):
-- Scale: 1 client (Александр), 1 developer (Максим), MVP stage
+- Scale: 1 client, 1 developer, MVP stage
 - Users: ~10 active, NOT millions. No horizontal scaling needed
 - Stack: {стек проекта}
 - Philosophy: "Pit of Success" — simple, flat, minimal abstractions. 3 lines > premature abstraction
@@ -150,7 +150,7 @@ PROJECT CONTEXT (calibrate your review severity accordingly):
 
 **Зачем:** без этого Codex на ревью 200 строк MVP-фикса выдаёт 15 suggestions про "добавьте retry policy", "нужен circuit breaker", "логирование недостаточно structured" — всё верно для Netflix, бесполезно для нас.
 
-**Адаптировать под проект:** parsing-hub (FastAPI+Redis), seo-platform (FastAPI+PostgreSQL), ai-assistants (FastAPI+SQLite+Asterisk), zahoron-laravel (Laravel 10+MySQL).
+**Адаптировать под проект:** указывай реальный стек конкретного проекта (язык, фреймворк, БД).
 
 ## Промпты
 

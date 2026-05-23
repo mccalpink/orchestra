@@ -23,6 +23,12 @@ If the task mentions a file path from the original repo — the same file exists
 - NEVER wait for CI in a loop — check status once, report, move on
 - Long-running commands (>60s) will timeout your turn. Keep Bash commands short
 
+## Tests / system load (СТРОГО)
+- NEVER run the full test suite. Run ONLY tests for files you changed + directly related tests
+- NEVER trigger broad/expensive runs on your own: full e2e, full build, load/perf tests, full lint over the whole repo
+- The dev machine is thermally constrained — heavy parallel runs overheat it
+- If the feature scope has many tests, FIRST check load (`uptime`, free RAM via `free -h`), then run the narrowest possible selection. If load is already high — report to orchestrator instead of running
+
 ## Codex review
 When asked to run Codex review — ALWAYS use the `codex-review` skill via Skill tool:
 ```

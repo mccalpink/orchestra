@@ -911,7 +911,7 @@ function updateAgentInfo(session) {
     st.className = `text-xs font-mono status-${session.status}`;
     $('#ai-model').textContent = session.model || '-';
     $('#ai-cost').textContent = `$${session.cost_usd || 0}`;
-    $('#ai-branch').textContent = session.branch || '-';
+    $('#ai-branch').textContent = session.branch || (_gitStatusByName[session.name] && _gitStatusByName[session.name].branch) || '-';
     $('#ai-scope').textContent = session.scope || '-';
     const descEl = $('#ai-desc'); const descLabel = $('#ai-desc-label');
     if (descEl && descLabel) {
@@ -4041,10 +4041,15 @@ let _tasksInterval = null;
 let _jobsTabActive = false;
 let _jobsInterval = null;
 
+let _gitTabActive = false;
+let _gitInterval = null;
+let _gitStatusByName = {};
+
 function switchLeftTab(tab) {
     const fileTree = document.getElementById('file-tree');
     const tasksPanel = document.getElementById('tasks-panel');
     const jobsPanel = document.getElementById('jobs-panel');
+    const gitPanel = document.getElementById('git-panel');
     document.querySelectorAll('.left-tab').forEach(btn => {
         const isActive = btn.dataset.leftTab === tab;
         btn.classList.toggle('text-white', isActive);
@@ -4055,12 +4060,16 @@ function switchLeftTab(tab) {
     if (fileTree) fileTree.classList.toggle('hidden', tab !== 'files');
     if (tasksPanel) tasksPanel.classList.toggle('hidden', tab !== 'tasks');
     if (jobsPanel) jobsPanel.classList.toggle('hidden', tab !== 'jobs');
+    if (gitPanel) gitPanel.classList.toggle('hidden', tab !== 'git');
     _tasksTabActive = tab === 'tasks';
     _jobsTabActive = tab === 'jobs';
+    _gitTabActive = tab === 'git';
     if (_tasksTabActive) { loadTasks(); if (!_tasksInterval) _tasksInterval = setInterval(loadTasks, 30000); }
     else { if (_tasksInterval) { clearInterval(_tasksInterval); _tasksInterval = null; } }
     if (_jobsTabActive) { loadJobs(); if (!_jobsInterval) _jobsInterval = setInterval(loadJobs, 10000); }
     else { if (_jobsInterval) { clearInterval(_jobsInterval); _jobsInterval = null; } }
+    if (_gitTabActive) { loadGitStatus(); if (!_gitInterval) _gitInterval = setInterval(loadGitStatus, 10000); }
+    else { if (_gitInterval) { clearInterval(_gitInterval); _gitInterval = null; } }
 }
 
 const STATUS_ORDER = ['in_progress', 'done', 'new', 'backlog', 'paid', 'cancelled'];
@@ -4298,4 +4307,54 @@ async function cancelJob(id) {
         await fetch(`/api/bg/jobs/${id}`, { method: 'DELETE' });
         loadJobs();
     } catch (e) { console.warn('Cancel job failed:', e); }
+}
+
+// === Git Panel ===
+async function loadGitStatus() {
+    const panel = document.getElementById('git-panel');
+    if (!panel) return;
+    try {
+        const scope = currentScope || '';
+        const resp = await fetch(`/api/git-status?scope=${encodeURIComponent(scope)}`);
+        const items = await resp.json();
+        renderGitPanel(panel, Array.isArray(items) ? items : []);
+    } catch (e) {
+        panel.innerHTML = '<div class="p-2 text-slate-500">Failed to load git status</div>';
+    }
+}
+
+function renderGitPanel(panel, items) {
+    _gitStatusByName = {};
+    for (const g of items) _gitStatusByName[g.name] = g;
+    // подтянуть ветку в инфо-панель выбранного агента, если там было пусто (напр. оркестратор)
+    const sel = $('#ai-name') ? $('#ai-name').textContent : '';
+    const cur = $('#ai-branch');
+    if (sel && _gitStatusByName[sel] && cur && (!cur.textContent || cur.textContent === '-')) {
+        cur.textContent = _gitStatusByName[sel].branch || '-';
+    }
+    if (items.length === 0) {
+        panel.innerHTML = '<div class="p-4 text-center text-slate-600 italic">No git info</div>';
+        return;
+    }
+    let html = '';
+    for (const g of items) html += _renderGitRow(g);
+    panel.innerHTML = html;
+}
+
+function _renderGitRow(g) {
+    const name = escHtml(g.name || '');
+    const branch = escHtml(g.branch || '-');
+    const ahead = g.commits_ahead > 0 ? `<span style="color:#34d399;font-family:monospace">↑${g.commits_ahead}</span>` : '';
+    const dirty = g.dirty_files > 0
+        ? `<span style="color:#fbbf24;font-family:monospace">●${g.dirty_files}</span>`
+        : `<span style="color:#475569;font-family:monospace">clean</span>`;
+    const last = g.last_commit ? escHtml(g.last_commit.slice(0, 48)) : '';
+    return `<div class="px-2 py-1.5 hover:bg-slate-800/50 rounded">
+        <div class="flex items-center gap-1.5">
+            <span class="flex-1 truncate font-mono" style="color:#e2e8f0">${name}</span>
+            ${ahead} ${dirty}
+        </div>
+        <div class="truncate" style="color:#818cf8;font-family:monospace;font-size:11px">${branch}</div>
+        ${last ? `<div class="truncate mt-0.5" style="color:#64748b;font-size:10px">${last}</div>` : ''}
+    </div>`;
 }
