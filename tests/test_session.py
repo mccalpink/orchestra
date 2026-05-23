@@ -186,3 +186,19 @@ async def test_orchestrator_never_auto_reports(monkeypatch):
     s._schedule_auto_report()
     await asyncio.sleep(0.15)
     assert fired == []  # оркестратор не auto-report'ит — нет спама наверх
+
+
+@pytest.mark.asyncio
+async def test_notify_scope_idle_prefers_parent(monkeypatch):
+    from app.session import AgentSession
+    import app.tg_bridge as tg
+    # воркер с parent_name=coder-auth
+    w = AgentSession(id="w", name="coder-step1", scope="/s", cwd="/tmp",
+                     is_orchestrator=False, parent_name="coder-auth")
+    captured = {}
+    async def fake_check(orch_name, scope):
+        captured["orch"] = orch_name
+    monkeypatch.setattr(tg, "check_scope_idle", fake_check)
+    monkeypatch.setattr(tg, "_manager", MagicMock(sessions={}))
+    await w._notify_scope_idle()
+    assert captured["orch"] == "coder-auth"

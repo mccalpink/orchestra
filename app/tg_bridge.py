@@ -698,8 +698,27 @@ def _any_running_in_scope(scope: str) -> bool:
     return False
 
 
+def _any_running_under(orch_name: str, scope: str) -> bool:
+    """True если сам оркестратор ИЛИ любой потомок (parent_name == orch_name) running.
+
+    Заменяет scope-global _any_running_in_scope там, где нужна изоляция между
+    оркестраторами одного scope. Фолбэк: если в scope только один оркестратор
+    и parent_name не заполнен — использовать _any_running_in_scope (legacy).
+    """
+    if not _manager or not scope:
+        return False
+    for s in _manager.sessions.values():
+        if s.scope != scope:
+            continue
+        if s.name == orch_name and s.status.value == "running":
+            return True
+        if getattr(s, "parent_name", None) == orch_name and s.status.value == "running":
+            return True
+    return False
+
+
 async def check_scope_idle(orch_name: str, scope: str):
-    if not _any_running_in_scope(scope):
+    if not _any_running_under(orch_name, scope):
         await _update_topic_status(orch_name, False)
 
 
@@ -712,7 +731,7 @@ async def _sync_all_topic_statuses():
         name = s.name
         if name not in config["topics"]:
             continue
-        is_running = _any_running_in_scope(s.scope)
+        is_running = _any_running_under(s.name, s.scope)
         _topic_status.pop(name, None)
         await _update_topic_status(name, is_running)
 
@@ -900,7 +919,7 @@ async def stream_logs(orch_name: str, thread_id: int):
                     text = f"❌ {c[:1000]}"
                 elif t == "status":
                     if "turn ended" in c:
-                        still_running = _any_running_in_scope(scope)
+                        still_running = _any_running_under(orch_name, scope)
                         if not still_running:
                             await _update_topic_status(orch_name, False)
                     text = f"⚡ {c}"

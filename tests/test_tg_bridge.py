@@ -253,3 +253,36 @@ class TestFeatureGrouping:
         ordered = [r["name"] for r in sorted(rows, key=_topic_sort_key)]
         # auth-группа целиком раньше pay-группы; внутри auth: pm-fichi < analyst < coder
         assert ordered == ["pm-fichi-auth", "analyst-auth", "coder-auth", "analyst-pay"]
+
+
+class TestAnyRunningUnder:
+    def _make_session(self, name, parent_name, status, scope="/s"):
+        from unittest.mock import MagicMock
+        s = MagicMock()
+        s.name = name
+        s.parent_name = parent_name
+        s.scope = scope
+        s.status.value = status
+        s.is_orchestrator = (parent_name == "")
+        return s
+
+    def test_running_agent_under_orch_returns_true(self, monkeypatch):
+        import app.tg_bridge as tg
+        orch = self._make_session("coder-auth", "", "idle")
+        worker = self._make_session("coder-step1", "coder-auth", "running")
+        monkeypatch.setattr(tg, "_manager", type("M", (), {"sessions": {"o": orch, "w": worker}})())
+        assert tg._any_running_under("coder-auth", "/s") is True
+
+    def test_other_orch_running_does_not_affect(self, monkeypatch):
+        # два оркестратора в одном scope: running у одного не зажигает иконку другого
+        import app.tg_bridge as tg
+        orch1 = self._make_session("coder-auth", "", "idle")
+        orch2 = self._make_session("analyst-auth", "", "idle")
+        worker_of_orch2 = self._make_session("analyst-step1", "analyst-auth", "running")
+        monkeypatch.setattr(tg, "_manager", type("M", (), {"sessions": {
+            "o1": orch1, "o2": orch2, "w": worker_of_orch2
+        }})())
+        # для coder-auth — не running
+        assert tg._any_running_under("coder-auth", "/s") is False
+        # для analyst-auth — running
+        assert tg._any_running_under("analyst-auth", "/s") is True
