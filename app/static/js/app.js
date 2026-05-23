@@ -483,12 +483,13 @@ async function createOrchestrator() {
     const name = $('#orch-name').value.trim();
     const cwd = $('#orch-cwd').value.trim();
     const model = $('#orch-model').value;
+    const role = $('#orch-role').value;
     const errEl = $('#orch-error');
     if (!name || !cwd) { errEl.textContent = 'Name and project path required'; errEl.classList.remove('hidden'); return; }
     const btn = $('#create-orch-btn');
     btn.disabled = true; btn.textContent = 'Creating...'; errEl.classList.add('hidden');
     try {
-        await api('/api/sessions', { method: 'POST', body: JSON.stringify({ name, cwd, model, is_orchestrator: true }) });
+        await api('/api/sessions', { method: 'POST', body: JSON.stringify({ name, cwd, model, is_orchestrator: true, role }) });
         closeModal(); $('#orch-name').value = ''; $('#orch-cwd').value = '';
         currentScope = null;
         await loadOrchestrators();
