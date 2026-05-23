@@ -86,6 +86,11 @@ def _media_name(prefix: str, ext: str, msg: types.Message) -> str:
 
 UPLOADS_MAX_BYTES = int(os.getenv("UPLOADS_MAX_MB", "1024")) * 1024 * 1024
 
+# По умолчанию воркеры молчат в TG. Их отчёты видны в топике оркестратора
+# через стандартный stream_logs (user_message [from:worker] → 📨 [from:worker]).
+# TG_WORKER_TOPICS=1 → у каждого воркера свой топик с полным потоком.
+WORKER_TOPICS_ENABLED = os.getenv("TG_WORKER_TOPICS", "") in ("1", "true", "True")
+
 # Юзернейм для @mention в сообщениях агента пользователю (его речь, тип "text" → 💬).
 # Пусто → без тэга. Тэгается ТОЛЬКО речь агента, НЕ внутренняя переписка агентов (📨 [from:]).
 # MVP: статичный ник из env. Динамическое определение «это обращение к юзеру» — в backlog.
@@ -200,8 +205,11 @@ async def _resolve_orch(msg: types.Message) -> tuple[str | None, object | None]:
     orch_name = None
     for name, tid in config["topics"].items():
         if tid == thread_id and msg.chat.id == config.get("group_id"):
-            orch_name = name
-            break
+            # Игнорируем stale worker-топики при выключенном флаге:
+            # _thread_for_session вернёт None для воркера при WORKER_TOPICS_ENABLED=False
+            if _thread_for_session(name) == tid:
+                orch_name = name
+                break
     if not orch_name:
         for name, mirror in config.get("mirrors", {}).items():
             if msg.chat.id == mirror.get("chat_id") and thread_id == mirror.get("topic_id"):
@@ -563,6 +571,28 @@ def _find_thread_for_scope(scope: str) -> int | None:
     if orch_name:
         return config["topics"].get(orch_name)
     return None
+
+
+def _thread_for_session(name: str) -> int | None:
+    """thread_id топика для сессии по имени.
+
+    - оркестратор → свой топик из config["topics"];
+    - воркер при WORKER_TOPICS_ENABLED=False (дефолт) → None (молчит, топика нет);
+    - воркер при WORKER_TOPICS_ENABLED=True → свой топик (если создан) или None.
+    Stale worker-топики в config["topics"] при выключенном флаге игнорируются.
+    """
+    from app.db import get_all_sessions
+    rows = {s.get("name"): s for s in get_all_sessions()}
+    row = rows.get(name)
+    if not row:
+        return None
+    is_orch = bool(row.get("is_orchestrator"))
+    if is_orch:
+        return config["topics"].get(name)
+    # воркер
+    if WORKER_TOPICS_ENABLED:
+        return config["topics"].get(name)  # свой топик или None если ещё не создан
+    return None  # дефолт: воркер молчит (stale-топик игнорируем)
 
 
 def _resolve_topic_label(orch_name: str) -> str:

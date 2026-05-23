@@ -69,3 +69,55 @@ class TestEnsureTopicsNaming:
         await tg.ensure_topics()
         assert created["name"] == "📋 auth"
         assert tg.config["topics"]["pm-fichi-auth"] == 555
+
+
+class TestThreadForSession:
+    def _stub_db(self, monkeypatch, rows):
+        monkeypatch.setattr("app.db.get_all_sessions", lambda: rows)
+
+    def test_orchestrator_uses_own_topic(self, monkeypatch):
+        import app.tg_bridge as tg
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"pm-fichi-auth": 100}, "mirrors": {}})
+        self._stub_db(monkeypatch, [
+            {"name": "pm-fichi-auth", "scope": "/s", "is_orchestrator": 1, "role": "pm-fichi", "parent_id": "", "parent_name": ""},
+        ])
+        assert tg._thread_for_session("pm-fichi-auth") == 100
+
+    def test_worker_silent_by_default_returns_none(self, monkeypatch):
+        # дефолт: TG_WORKER_TOPICS=False → воркер молчит → None
+        import app.tg_bridge as tg
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"coder-auth": 200}, "mirrors": {}})
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", False)
+        self._stub_db(monkeypatch, [
+            {"name": "coder-auth", "scope": "/s", "is_orchestrator": 1, "role": "coder", "parent_id": "", "parent_name": ""},
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        assert tg._thread_for_session("coder-step1") is None
+
+    def test_worker_with_own_topics_enabled(self, monkeypatch):
+        # TG_WORKER_TOPICS=True → воркер стримится в свой топик
+        import app.tg_bridge as tg
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"coder-auth": 200, "coder-step1": 201}, "mirrors": {}})
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", True)
+        self._stub_db(monkeypatch, [
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        assert tg._thread_for_session("coder-step1") == 201
+
+    def test_unknown_session_returns_none(self, monkeypatch):
+        import app.tg_bridge as tg
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {}, "mirrors": {}})
+        self._stub_db(monkeypatch, [])
+        assert tg._thread_for_session("ghost") is None
+
+    def test_stale_worker_topic_ignored_when_flag_off(self, monkeypatch):
+        # B3: stale worker-топик в config["topics"] при выключенном флаге
+        # → _thread_for_session должен вернуть None, а не stale thread_id
+        import app.tg_bridge as tg
+        # stale-топик воркера остался в json-конфиге после выключения TG_WORKER_TOPICS
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"coder-auth": 200, "coder-step1": 201}, "mirrors": {}})
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", False)
+        self._stub_db(monkeypatch, [
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        assert tg._thread_for_session("coder-step1") is None
