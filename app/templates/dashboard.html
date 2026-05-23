@@ -55,6 +55,17 @@
                     <select id="orch-model" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm focus:border-indigo-500 focus:outline-none">
                     </select>
                 </div>
+                <div>
+                    <label class="text-xs text-slate-500 block mb-1">Role <span class="text-slate-600">(optional)</span></label>
+                    <select id="orch-role" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm focus:border-indigo-500 focus:outline-none">
+                        <option value="">— no role (generic) —</option>
+                        <option value="base-orchestrator">🧭 base-orchestrator (Хаб)</option>
+                        <option value="pm-glava">🎯 pm-glava (спринт-лид)</option>
+                        <option value="pm-fichi">📋 pm-fichi (PM фичи)</option>
+                        <option value="analyst">🔬 analyst (аналитик)</option>
+                        <option value="coder">🛠 coder (кодер)</option>
+                    </select>
+                </div>
                 <div id="orch-error" class="text-xs text-red-400 hidden"></div>
                 <button id="create-orch-btn" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors">Create Orchestrator</button>
             </div>
