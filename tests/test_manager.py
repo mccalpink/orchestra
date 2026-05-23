@@ -242,3 +242,18 @@ def test_role_prompt_appended():
     from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
     p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="coder")
     assert "КОДЕР" in p or "Кодер" in p or "coder" in p.lower()
+
+
+class TestHierarchyReport:
+    @pytest.mark.asyncio
+    async def test_resolves_parent_id_from_name(self, mgr):
+        with patch("app.session.AgentSession._make_backend", return_value=AsyncMock(
+            connect=AsyncMock(), query=AsyncMock(), disconnect=AsyncMock(),
+            receive_messages=AsyncMock(return_value=iter([])),
+        )):
+            parent = await mgr.create_session(name="pm-fichi-auth", scope="/s", cwd="/tmp",
+                                              model="claude-opus-4-6[1m]", is_orchestrator=True, role="pm-fichi")
+            child = await mgr.create_session(name="analyst-auth", scope="/s", cwd="/tmp",
+                                             model="claude-opus-4-6[1m]", is_orchestrator=True,
+                                             role="analyst", parent_name="pm-fichi-auth")
+        assert child.parent_id == parent.id
