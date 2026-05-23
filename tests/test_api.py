@@ -204,6 +204,16 @@ class TestOrchestrators:
         assert isinstance(r.json(), list)
 
 
+def test_create_request_accepts_role_parent():
+    from app.main import CreateSessionRequest
+    req = CreateSessionRequest(name="coder-auth", cwd="/tmp", model="claude-sonnet-4-6",
+                               is_orchestrator=True, role="coder",
+                               parent_id="pid", parent_name="pm-fichi-auth")
+    assert req.role == "coder"
+    assert req.parent_id == "pid"
+    assert req.parent_name == "pm-fichi-auth"
+
+
 def test_create_request_accepts_base_branch():
     from app.main import CreateSessionRequest
     req = CreateSessionRequest(name="w1", cwd="/tmp", model="claude-sonnet-4-6",
