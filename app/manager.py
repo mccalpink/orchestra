@@ -190,6 +190,11 @@ class SessionManager:
         if get_session_by_name(name, scope):
             raise ValueError(f"session '{name}' already exists in scope '{scope}'")
 
+        if parent_name and not parent_id:
+            p = self._find_session_by_name(parent_name, scope)
+            if p:
+                parent_id = p.id
+
         if is_orchestrator:
             prompt = system_prompt or ORCHESTRATOR_SYSTEM_PROMPT(scope, role)
         else:
@@ -222,12 +227,15 @@ class SessionManager:
                 session.branch = wt.branch
 
             if not is_orchestrator:
-                orch_name = self._find_orchestrator_name(scope)
+                orch_name = parent_name or self._find_orchestrator_name(scope)
                 session.system_prompt = _safe_format_prompt(
                     session.system_prompt,
                     worker_name=name, orchestrator_name=orch_name or "orchestrator",
                     scope=scope, branch=session.branch or "main",
                 )
+            if parent_id:
+                session.on_idle = self._make_idle_callback_parent(parent_id)
+            elif not is_orchestrator:
                 session.on_idle = self._make_idle_callback(scope)
 
             save_session(session._to_db_dict())
@@ -385,6 +393,12 @@ class SessionManager:
                 return s.name
         return None
 
+    def _find_session_by_name(self, name: str, scope: str):
+        for s in self.sessions.values():
+            if s.name == name and s.scope == scope:
+                return s
+        return None
+
     def _context_warning(self, worker_name: str) -> str:
         session = next((s for s in self.sessions.values() if s.name == worker_name), None)
         if not session:
@@ -415,6 +429,17 @@ class SessionManager:
             logger.info(f"Auto-report: {worker_name} → {orch}")
             await orch_session.send(msg)
         return _on_worker_idle
+
+    def _make_idle_callback_parent(self, parent_id: str):
+        async def _on_idle(child_name: str, child_scope: str, last_texts: list[str]):
+            parent = self.sessions.get(parent_id)
+            if not parent:
+                return
+            summary = "\n".join(last_texts[-3:]) if last_texts else "(no output)"
+            ctx = self._context_warning(child_name)
+            msg = f"[from:{child_name}] [auto-report] Finished turn without explicit report. Last output:\n{summary}{ctx}"
+            await parent.send(msg)
+        return _on_idle
 
     # ── Listings ──
 
