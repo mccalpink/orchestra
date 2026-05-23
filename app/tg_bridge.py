@@ -652,6 +652,21 @@ async def send_file_to_tg(path: str, caption: str, scope: str, sender: str, as_d
 
 _topic_status = {}
 
+# Единый трекер запущенных стримов. Все точки запуска stream_logs идут через _start_stream.
+_streamed: set[str] = set()
+
+
+def _start_stream(name: str, thread_id: int) -> None:
+    """Идемпотентный запуск stream_logs для сессии.
+
+    Если стрим для name уже запущен (_streamed содержит имя) — возвращает без действий.
+    Все три точки запуска (ensure_topics, start_bridge, topic_sync_loop) идут только сюда.
+    """
+    if name in _streamed:
+        return
+    _streamed.add(name)
+    _tasks.append(asyncio.create_task(stream_logs(name, thread_id)))
+
 
 def _any_running_in_scope(scope: str) -> bool:
     if not _manager or not scope:
@@ -726,7 +741,10 @@ async def ensure_topics():
     if not bot or not config["group_id"] or not _manager:
         return
     from app.db import get_all_sessions
-    orchs = [s for s in get_all_sessions() if s.get("is_orchestrator")]
+    sessions = get_all_sessions()
+    orchs = [s for s in sessions if s.get("is_orchestrator")]
+    if WORKER_TOPICS_ENABLED:
+        orchs = orchs + [s for s in sessions if not s.get("is_orchestrator")]
     if not orchs:
         return
 
@@ -740,7 +758,7 @@ async def ensure_topics():
             config["topics"][name] = result.message_thread_id
             save_config()
             logger.info(f"Created topic for {name}: {result.message_thread_id}")
-            asyncio.create_task(stream_logs(name, result.message_thread_id))
+            _start_stream(name, result.message_thread_id)
         except Exception as e:
             logger.error(f"Failed to create topic for {name}: {e}")
 
@@ -1061,8 +1079,11 @@ async def start_bridge(manager):
     await ensure_topics()
     await _sync_all_topic_statuses()
 
-    for name, thread_id in config["topics"].items():
-        _tasks.append(asyncio.create_task(stream_logs(name, thread_id)))
+    from app.db import get_all_sessions as _gas
+    for row in _gas():
+        tid = _thread_for_session(row["name"])
+        if tid is not None:
+            _start_stream(row["name"], tid)
 
     _tasks.append(asyncio.create_task(topic_sync_loop()))
     _tasks.append(asyncio.create_task(_safe_polling()))
