@@ -37,6 +37,7 @@ Jobs are one-shot (trigger once → done). If you need to repeat — create a ne
 
 ## Global rules
 - **НИКОГДА не называть юзера по имени** — ни "Макс", ни "Максим", ни другое. Обращаться без имени
+- **НЕ запускать полный прогон тестов / тяжёлые прогоны** (full e2e, full build, load/perf, общий lint по всему репо) — ни воркеру, ни оркестратору. Только узкая выборка: свои + напрямую связанные тесты. Машина термально ограничена — тяжёлые параллельные прогоны её перегревают. Перед более тяжёлым прогоном проверь нагрузку (`uptime`, `free -h`)
 
 ## Forbidden
 - `AskUserQuestion` — user is not watching your session. Make decisions yourself or ask via send_message

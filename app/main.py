@@ -173,26 +173,40 @@ def _encode_path(path: str) -> str:
 
 
 def _build_path_map() -> dict[str, str]:
-    scan_roots = [
-        "/mnt/data/Projects/Python",
-        "/mnt/data/Projects/Unity",
-        "/mnt/data/Projects",
-        str(Path.home()),
-    ]
+    env_roots = os.environ.get("ORCHESTRA_SCAN_ROOTS", "")
+    if env_roots:
+        scan_roots = [p for p in env_roots.split(":") if p]
+    else:
+        scan_roots = [
+            "/mnt/data/Projects/Python",
+            "/mnt/data/Projects/Unity",
+            "/mnt/data/Projects",
+        ]
+    scan_roots.append(str(Path.home()))
     mapping = {}
     for root in scan_roots:
-        if not Path(root).is_dir():
+        rp = Path(root)
+        if not rp.is_dir():
             continue
-        mapping[_encode_path(root)] = root
-        for entry in Path(root).iterdir():
-            if entry.is_dir() and not entry.name.startswith("."):
-                mapping[_encode_path(str(entry))] = str(entry)
+        mapping[_encode_path(str(rp))] = str(rp)
+        try:
+            for lvl1 in rp.iterdir():
+                if not lvl1.is_dir() or lvl1.name.startswith("."):
+                    continue
+                mapping[_encode_path(str(lvl1))] = str(lvl1)
+                # второй уровень: проекты лежат глубже (напр. ~/projects/<группа>/<проект>)
+                for lvl2 in lvl1.iterdir():
+                    if lvl2.is_dir() and not lvl2.name.startswith("."):
+                        mapping[_encode_path(str(lvl2))] = str(lvl2)
+        except PermissionError:
+            continue
     return mapping
 
 
 @app.get("/api/projects")
 async def list_projects():
-    projects_dir = Path.home() / ".claude" / "projects"
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+    projects_dir = Path(config_dir) / "projects"
     if not projects_dir.is_dir():
         return []
     path_map = _build_path_map()
@@ -1036,16 +1050,21 @@ async def get_git_status(scope: str):
     sessions = manager.list_sessions(scope)
     result = []
     for s in sessions:
-        wt = s.get("worktree_path") if isinstance(s, dict) else getattr(s, "worktree_path", None)
-        if not wt or not Path(wt).is_dir():
+        is_dict = isinstance(s, dict)
+        wt = s.get("worktree_path") if is_dict else getattr(s, "worktree_path", None)
+        name = s.get("name") if is_dict else s.name
+        branch = s.get("branch") if is_dict else getattr(s, "branch", None)
+        scope_dir = s.get("scope") if is_dict else getattr(s, "scope", None)
+        # воркер — его worktree; оркестратор — корень репо (scope), чтобы видеть ветку проекта
+        work_dir = wt if (wt and Path(wt).is_dir()) else scope_dir
+        if not work_dir or not Path(work_dir).is_dir():
             continue
-        name = s.get("name") if isinstance(s, dict) else s.name
-        branch = s.get("branch") if isinstance(s, dict) else getattr(s, "branch", None)
 
-        ahead_str, dirty_str, last_commit = await asyncio.gather(
-            _run_git(["git", "rev-list", "main..HEAD", "--count"], wt),
-            _run_git(["git", "status", "--porcelain"], wt),
-            _run_git(["git", "log", "-1", "--format=%s"], wt),
+        ahead_str, dirty_str, last_commit, cur_branch = await asyncio.gather(
+            _run_git(["git", "rev-list", "main..HEAD", "--count"], work_dir),
+            _run_git(["git", "status", "--porcelain"], work_dir),
+            _run_git(["git", "log", "-1", "--format=%s"], work_dir),
+            _run_git(["git", "rev-parse", "--abbrev-ref", "HEAD"], work_dir),
         )
 
         commits_ahead = int(ahead_str) if ahead_str.isdigit() else 0
@@ -1054,7 +1073,7 @@ async def get_git_status(scope: str):
 
         result.append({
             "name": name,
-            "branch": branch or "",
+            "branch": branch or cur_branch or "",
             "commits_ahead": commits_ahead,
             "dirty_files": dirty_files,
             "last_commit": last_commit,
