@@ -88,6 +88,9 @@ class CreateSessionRequest(BaseModel):
     is_orchestrator: bool = False
     task_id: str = ""
     description: str = ""
+    role: str = ""
+    parent_id: str = ""
+    parent_name: str = ""
 
     @field_validator("name")
     @classmethod
@@ -360,6 +363,9 @@ async def create_session(req: CreateSessionRequest):
             is_orchestrator=req.is_orchestrator,
             task_id=req.task_id,
             description=req.description,
+            role=req.role,
+            parent_id=req.parent_id,
+            parent_name=req.parent_name,
         )
         return session.to_dict()
     except ValueError as e:
