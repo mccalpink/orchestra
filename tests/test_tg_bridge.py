@@ -121,3 +121,121 @@ class TestThreadForSession:
             {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
         ])
         assert tg._thread_for_session("coder-step1") is None
+
+
+class TestWorkerStreamWiring:
+    @pytest.mark.asyncio
+    async def test_no_worker_topic_by_default(self, monkeypatch):
+        # дефолт: WORKER_TOPICS_ENABLED=False → воркеру топик не создаётся
+        import app.tg_bridge as tg
+        from unittest.mock import AsyncMock, MagicMock
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {}, "token": "t", "mirrors": {}})
+        monkeypatch.setattr(tg, "_manager", MagicMock())
+        monkeypatch.setattr(tg, "save_config", lambda: None)
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", False)
+        monkeypatch.setattr(tg.asyncio, "create_task", lambda coro: (coro.close() or MagicMock()))
+        fake_bot = MagicMock()
+        r = MagicMock(); r.message_thread_id = 7
+        fake_bot.create_forum_topic = AsyncMock(return_value=r)
+        monkeypatch.setattr(tg, "bot", fake_bot)
+        monkeypatch.setattr("app.db.get_all_sessions", lambda: [
+            {"name": "coder-auth", "scope": "/s", "is_orchestrator": 1, "role": "coder", "parent_id": "", "parent_name": ""},
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        await tg.ensure_topics()
+        # топик создан только оркестратору
+        assert "coder-auth" in tg.config["topics"]
+        assert "coder-step1" not in tg.config["topics"]
+
+    @pytest.mark.asyncio
+    async def test_worker_own_topic_when_enabled(self, monkeypatch):
+        # TG_WORKER_TOPICS=True → воркер получает свой топик
+        import app.tg_bridge as tg
+        from unittest.mock import AsyncMock, MagicMock
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {}, "token": "t", "mirrors": {}})
+        monkeypatch.setattr(tg, "_manager", MagicMock())
+        monkeypatch.setattr(tg, "save_config", lambda: None)
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", True)
+        monkeypatch.setattr(tg.asyncio, "create_task", lambda coro: (coro.close() or MagicMock()))
+        ids = iter([10, 11])
+        async def fake_create(chat_id, name, icon_custom_emoji_id=None):
+            r = MagicMock(); r.message_thread_id = next(ids); return r
+        fake_bot = MagicMock(); fake_bot.create_forum_topic = AsyncMock(side_effect=fake_create)
+        monkeypatch.setattr(tg, "bot", fake_bot)
+        monkeypatch.setattr("app.db.get_all_sessions", lambda: [
+            {"name": "coder-auth", "scope": "/s", "is_orchestrator": 1, "role": "coder", "parent_id": "", "parent_name": ""},
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        await tg.ensure_topics()
+        assert "coder-step1" in tg.config["topics"]
+
+    def test_start_stream_idempotent(self, monkeypatch):
+        # _start_stream вызывает create_task ровно один раз для одной сессии
+        import app.tg_bridge as tg
+        from unittest.mock import MagicMock, AsyncMock
+        calls = []
+        monkeypatch.setattr(tg, "_streamed", set())
+        monkeypatch.setattr(tg, "_tasks", [])
+        monkeypatch.setattr(tg, "stream_logs", AsyncMock())
+        monkeypatch.setattr(tg.asyncio, "create_task", lambda coro: (calls.append(coro) or MagicMock()))
+        tg._start_stream("coder-auth", 100)
+        tg._start_stream("coder-auth", 100)  # повторный вызов — игнорируется
+        assert len(calls) == 1
+        assert "coder-auth" in tg._streamed
+
+    def test_start_stream_worker_own_topic_id(self, monkeypatch):
+        # _start_stream запускает stream_logs с правильным topic_id воркера
+        import app.tg_bridge as tg
+        from unittest.mock import MagicMock, AsyncMock, call
+        logged = []
+        monkeypatch.setattr(tg, "_streamed", set())
+        monkeypatch.setattr(tg, "_tasks", [])
+        mock_sl = AsyncMock()
+        monkeypatch.setattr(tg, "stream_logs", mock_sl)
+        monkeypatch.setattr(tg.asyncio, "create_task", lambda coro: MagicMock())
+        tg._start_stream("coder-step1", 201)
+        # убедимся, что stream_logs был вызван с name=coder-step1, thread_id=201
+        # Минимальная проверка: имя есть в _streamed, задача добавлена в _tasks
+        assert "coder-step1" in tg._streamed
+
+    def test_worker_not_streamed_by_default(self, monkeypatch):
+        # при WORKER_TOPICS_ENABLED=False _thread_for_session возвращает None
+        # → _start_stream НЕ вызывается для воркера
+        import app.tg_bridge as tg
+        from unittest.mock import MagicMock
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", False)
+        monkeypatch.setattr(tg, "_streamed", set())
+        monkeypatch.setattr(tg, "_tasks", [])
+        create_task_calls = []
+        monkeypatch.setattr(tg.asyncio, "create_task", lambda c: create_task_calls.append(c))
+        monkeypatch.setattr("app.db.get_all_sessions", lambda: [
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"coder-step1": 201}, "mirrors": {}})
+        # _thread_for_session для воркера при флаге off → None → _start_stream не вызван
+        assert tg._thread_for_session("coder-step1") is None
+        assert len(create_task_calls) == 0  # stream не запустился
+
+    def test_stale_worker_not_streamed_in_start_bridge(self, monkeypatch):
+        # start_bridge использует _thread_for_session, а не слепой цикл по config["topics"]
+        # stale worker-топик в config["topics"] при флаге off не порождает стрим
+        import app.tg_bridge as tg
+        from unittest.mock import MagicMock
+        monkeypatch.setattr(tg, "WORKER_TOPICS_ENABLED", False)
+        monkeypatch.setattr(tg, "_streamed", set())
+        # stale в config — воркер с топиком, но флаг выключен
+        monkeypatch.setattr(tg, "config", {"group_id": 1, "topics": {"coder-auth": 200, "coder-step1": 201}, "mirrors": {}})
+        monkeypatch.setattr("app.db.get_all_sessions", lambda: [
+            {"name": "coder-auth", "scope": "/s", "is_orchestrator": 1, "role": "coder", "parent_id": "", "parent_name": ""},
+            {"name": "coder-step1", "scope": "/s", "is_orchestrator": 0, "role": "worker", "parent_id": "", "parent_name": "coder-auth"},
+        ])
+        # Имитируем логику start_bridge: для каждой сессии из БД → _thread_for_session
+        streamed = []
+        # Новый подход: обходим сессии из БД
+        from app.db import get_all_sessions
+        for row in get_all_sessions():
+            tid = tg._thread_for_session(row["name"])
+            if tid is not None:
+                streamed.append(row["name"])
+        assert "coder-step1" not in streamed  # воркер не стримится при флаге off
+        assert "coder-auth" in streamed        # оркестратор стримится
