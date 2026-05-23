@@ -332,6 +332,19 @@ class TestHierarchyReport:
         assert child.parent_id == parent.id
 
 
+def test_coder_prompt_mentions_test_lock_tool():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="coder")
+    assert "acquire_test_lock" in p
+    assert "release_test_lock" in p
+
+
+def test_pm_fichi_prompt_mentions_test_lock():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="pm-fichi")
+    assert "acquire_test_lock" in p or "test_lock_status" in p
+
+
 class TestResumeHierarchy:
     @pytest.mark.asyncio
     async def test_load_restores_role_parent(self, mgr):
