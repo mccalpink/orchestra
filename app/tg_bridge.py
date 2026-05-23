@@ -565,6 +565,16 @@ def _find_thread_for_scope(scope: str) -> int | None:
     return None
 
 
+def _resolve_topic_label(orch_name: str) -> str:
+    """Имя топика для orch_name по данным БД (роль/scope). Фолбэк — _short_name."""
+    from app.db import get_all_sessions
+    for s in get_all_sessions():
+        if s.get("name") == orch_name:
+            return _topic_label(s.get("role", ""), bool(s.get("is_orchestrator")),
+                                orch_name, s.get("scope", ""))
+    return _short_name(orch_name)
+
+
 async def _mirror_send_file(orch_name: str, tg_file, caption: str, is_photo: bool):
     mirror = config.get("mirrors", {}).get(orch_name)
     if not mirror or not bot:
@@ -654,7 +664,7 @@ async def _update_topic_status(orch_name: str, is_running: bool):
     if _topic_status.get(orch_name) == is_running:
         return
     _topic_status[orch_name] = is_running
-    short = _short_name(orch_name)
+    short = _resolve_topic_label(orch_name)
     icon_id = _ICON_RUNNING if is_running else _ICON_IDLE
     thread_id = config["topics"].get(orch_name)
     if thread_id and bot:
@@ -700,7 +710,7 @@ async def ensure_topics():
         if name in config["topics"]:
             continue
         try:
-            short = _short_name(name)
+            short = _topic_label(o.get("role", ""), bool(o.get("is_orchestrator")), name, o.get("scope", ""))
             result = await bot.create_forum_topic(chat_id=config["group_id"], name=short, icon_custom_emoji_id=_ICON_IDLE)
             config["topics"][name] = result.message_thread_id
             save_config()
