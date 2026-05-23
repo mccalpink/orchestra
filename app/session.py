@@ -77,6 +77,9 @@ class AgentSession:
     backend_type: str = "claude"
     task_id: str = ""
     description: str = ""
+    role: str = ""
+    parent_id: str = ""
+    parent_name: str = ""
 
     progress_pct: int = 0
     progress_status: str = ""
@@ -777,6 +780,7 @@ class AgentSession:
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "total_tool_calls": self.total_tool_calls,
+            "role": self.role, "parent_id": self.parent_id, "parent_name": self.parent_name,
         }
 
     async def get_context(self) -> dict:
@@ -801,4 +805,5 @@ class AgentSession:
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "total_tool_calls": self.total_tool_calls,
+            "role": self.role, "parent_id": self.parent_id, "parent_name": self.parent_name,
         }
