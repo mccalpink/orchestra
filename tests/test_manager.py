@@ -206,3 +206,8 @@ class TestRoleParent:
         assert s.parent_name == "pm-fichi-auth"
         assert s.is_orchestrator is True
 
+
+def test_role_prompt_appended():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="coder")
+    assert "КОДЕР" in p or "Кодер" in p or "coder" in p.lower()
