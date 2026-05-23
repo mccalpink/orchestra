@@ -153,9 +153,12 @@ class SessionManager:
                 session = await self.create_session(
                     name=job["name"], scope=job["repo_path"], cwd=job["repo_path"],
                     model=job["model"], system_prompt=job.get("system_prompt", ""),
-                    use_worktree=True, repo_path=job["repo_path"],
+                    use_worktree=job.get("use_worktree", True), repo_path=job["repo_path"],
                     task_id=job.get("task_id", ""),
                     description=job.get("description", ""),
+                    is_orchestrator=job.get("is_orchestrator", False),
+                    role=job.get("role", ""),
+                    parent_name=job.get("parent_name", ""),
                 )
                 await session.send(job["task"])
                 update_job(job_id, "succeeded")
@@ -358,6 +361,9 @@ class SessionManager:
             mcp_servers=_make_mcp_config(db_row["name"], db_row["scope"], is_orch),
             backend_type=stored_bt, task_id=db_task_id,
             description=db_row.get("description", ""),
+            role=db_row.get("role", ""),
+            parent_id=db_row.get("parent_id", ""),
+            parent_name=db_row.get("parent_name", ""),
         )
         pct = db_row.get("context_pct", 0) or 0
         tokens = db_row.get("context_tokens", 0) or 0
@@ -382,7 +388,9 @@ class SessionManager:
                 custom_part = old_prompt[len(formatted_base):]
                 current_prompt = current_prompt + custom_part
         session._current_prompt = current_prompt
-        if not is_orch:
+        if db_row.get("parent_id"):
+            session.on_idle = self._make_idle_callback_parent(db_row["parent_id"])
+        elif not is_orch:
             session.on_idle = self._make_idle_callback(db_row["scope"])
         await session.start()
         self.sessions[session.id] = session
