@@ -103,6 +103,7 @@ _ROLE_DOC_DIRS_FEATURE = {
     "pm-fichi": ("_pm", "# PM Dashboard — {feature}\n\n## Этапы\n\n- [ ] анализ\n- [ ] реализация\n"),
     "analyst": ("_analysis", "# Анализ — {feature}\n\n## Чеклист\n\n- [ ] изучен бэк\n- [ ] изучен фронт\n"),
     "coder": ("_impl", "# Реализация — {feature}\n\n## Этапы\n\n- [ ] этап 1\n"),
+    "tester": ("_testing", "# Тестирование — {feature}\n\n## Сценарии\n\n- [ ] happy path\n- [ ] эджкейсы\n"),
 }
 
 
@@ -128,8 +129,15 @@ def _scaffold_role_docs(cwd: str, role: str, feature: str = "") -> None:
         dashboard.write_text(tpl)
 
 
+_PIPELINE_ROLES = {"pm-glava", "pm-fichi", "analyst", "coder", "tester"}
+
+
 def ORCHESTRATOR_SYSTEM_PROMPT(scope: str = "", role: str = "") -> str:
     base = f"{_read_prompt('base.md')}\n\n{_read_prompt('orchestrator.md')}"
+    if role in _PIPELINE_ROLES:
+        pipeline = _read_prompt("roles/_pipeline.md")
+        if pipeline:
+            base += f"\n\n{pipeline}"
     base += _read_role_prompt(role)
     others = _other_orchestrators_block(scope)
     if others:
