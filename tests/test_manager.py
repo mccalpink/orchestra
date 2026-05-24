@@ -366,3 +366,30 @@ class TestResumeHierarchy:
         assert s.role == "coder"
         assert s.parent_id == "pid-1"
         assert s.parent_name == "pm-fichi-auth"
+
+
+def test_pipeline_layer_included_for_pipeline_roles():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="pm-fichi")
+    assert "Пайплайн — сквозные правила" in p
+
+
+def test_pipeline_layer_excluded_for_hub():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="base-orchestrator")
+    assert "Пайплайн — сквозные правила" not in p
+
+
+def test_flat_cto_only_in_hub_not_pipeline():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    hub = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="base-orchestrator")
+    pm = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="pm-fichi")
+    assert "Disposable" in hub
+    assert "Disposable" not in pm
+
+
+def test_tester_is_pipeline_role():
+    from app.manager import ORCHESTRATOR_SYSTEM_PROMPT
+    p = ORCHESTRATOR_SYSTEM_PROMPT("/s", role="tester")
+    assert "Пайплайн — сквозные правила" in p
+    assert "Тестировщик" in p
